@@ -117,7 +117,10 @@ $('getRates').onclick = async () => {
   }
 
   try {
-    const r = await fetch('/api/shipping/quote', {
+    const demo = new URLSearchParams(location.search).get('demo') === '1';
+const endpoint = '/api/shipping/quote' + (demo ? '?demo=1' : '');
+const r = await fetch(endpoint, {
+
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
