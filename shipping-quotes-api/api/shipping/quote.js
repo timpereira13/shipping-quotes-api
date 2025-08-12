@@ -1,6 +1,6 @@
 // api/shipping/quote.js — force-demo + GET support
 
-const FORCE_DEMO = false; // <- set to false later when live creds work
+const FORCE_DEMO = true; // <- set to false later when live creds work
 
 module.exports = async (req, res) => {
   // --- CORS (keep '*' while testing; restrict later) ---
