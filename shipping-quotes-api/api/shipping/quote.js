@@ -1,8 +1,8 @@
-// api/shipping/quote.js
+// api/shipping/quote.js  (CommonJS version)
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') {
-    // (optional) CORS preflight if you’re calling from BigCommerce
+    // CORS (safe to keep '*' while testing; later restrict to your domain)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ error: 'Server failure', detail: e?.message || String(e) });
   }
-}
+};
 
 function filterServices(q, filters) {
   if (!filters?.length) return true;
@@ -187,4 +187,17 @@ async function fedexAuth() {
   const auth = Buffer.from(`${process.env.FEDEX_CLIENT_ID}:${process.env.FEDEX_CLIENT_SECRET}`).toString('base64');
   const r = await fetch('https://apis.fedex.com/oauth/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'applic
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${auth}` },
+    body: 'grant_type=client_credentials',
+  });
+  if (!r.ok) throw new Error('FedEx auth failed ' + r.status);
+  const j = await r.json();
+  return j.access_token;
+}
+
+function parseTransit(s) {
+  const m = /(\w+)_DAYS?/.exec(s || '');
+  if (!m) return undefined;
+  const map = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7 };
+  return map[m[1]] || undefined;
+}
