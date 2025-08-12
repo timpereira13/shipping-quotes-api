@@ -40,12 +40,20 @@
         <input id="originState" placeholder="FL" />
       </div>
       <div class="field small">
+        <label>Origin City</label>
+        <input id="originCity" placeholder="Ocala" />
+      </div>
+      <div class="field small">
         <label>Destination ZIP</label>
         <input id="destZip" placeholder="90210" />
       </div>
       <div class="field small">
         <label>Destination State (e.g., CA)</label>
         <input id="destState" placeholder="CA" />
+      </div>
+      <div class="field small">
+        <label>Destination City</label>
+        <input id="destCity" placeholder="Beverly Hills" />
       </div>
       <div class="field small">
         <label>Address Type</label>
@@ -104,7 +112,7 @@
 <script>
 const $ = id => document.getElementById(id);
 
-// Set badge from diag
+// Show current env on badge
 (async function setEnvBadge(){
   try {
     const r = await fetch('/api/shipping/quote?diag=1');
@@ -122,8 +130,10 @@ $('getRates').onclick = async () => {
   const payload = {
     origin_zip: $('originZip').value.trim(),
     origin_state: $('originState').value.trim() || null,
+    origin_city: $('originCity').value.trim() || null,
     dest_zip: $('destZip').value.trim(),
     dest_state: $('destState').value.trim() || null,
+    dest_city: $('destCity').value.trim() || null,
     residential: $('residential').value === 'true',
     weight_lb: parseFloat($('weight').value),
     dimensions_in: {
