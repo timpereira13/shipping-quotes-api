@@ -166,4 +166,81 @@ async function getUpsRates(input){
 async function upsAuth(){
   const id = process.env.UPS_CLIENT_ID, secret = process.env.UPS_CLIENT_SECRET;
   if(!id || !secret) throw new Error('UPS credentials missing');
-  const auth = Buffer.from(`${id}
+  const auth = Buffer.from(`${id}:${secret}`).toString('base64');
+  const r = await fetch(`${UPS_AUTH_HOST}/security/v1/oauth/token`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/x-www-form-urlencoded', 'Authorization':`Basic ${auth}` },
+    body:'grant_type=client_credentials'
+  });
+  if(!r.ok) throw new Error(`UPS auth failed ${r.status} ${await r.text()}`);
+  const j = await r.json();
+  return j.access_token;
+}
+
+/* ---------------- FedEx ---------------- */
+async function getFedexRates(input){
+  const token = await fedexAuth();
+  const payload = {
+    accountNumber: { value: process.env.FEDEX_ACCOUNT_NUMBER || '' },
+    requestedShipment: {
+      shipper: { address: { postalCode: String(input.origin_zip), countryCode:'US' } },
+      recipient: { address: { postalCode: String(input.dest_zip), countryCode:'US', residential: !!input.residential } },
+      pickupType: 'DROPOFF_AT_FEDEX_LOCATION',
+      rateRequestType: ['ACCOUNT','LIST'],
+      requestedPackageLineItems: [{
+        weight: { units:'LB', value:Number(input.weight_lb) },
+        dimensions: input.dimensions_in ? {
+          length:Number(input.dimensions_in.length), width:Number(input.dimensions_in.width), height:Number(input.dimensions_in.height), units:'IN'
+        } : undefined,
+        declaredValue: input.declared_value ? { currency:'USD', amount:Number(input.declared_value) } : undefined
+      }],
+      shipDateStamp: input.ship_date || undefined
+    }
+  };
+
+  const r = await fetch(`${FEDEX_API_HOST}/rate/v1/rates/quotes`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+  if(!r.ok) throw new Error(`FedEx rate error ${r.status} ${await r.text()}`);
+  const j = await r.json();
+
+  const details = j?.output?.rateReplyDetails || [];
+  return details.flatMap(d => {
+    const svc = d.serviceName || d.serviceType;
+    const amounts = d?.ratedShipmentDetails?.[0]?.totalNetCharge
+      || d?.ratedShipmentDetails?.[0]?.shipmentRateDetail?.totalNetChargeWithDutiesAndTaxes;
+    const amt = amounts?.amount ?? 0;
+    const etd = d?.commit?.dateDetail?.dayFormat || d?.commit?.datesOrTimes?.[0]?.dateOrTimestamp;
+    const transit = d?.commit?.transitTime || d?.transitTime;
+    return [{ carrier:'FedEx', service_name: svc, total_charge: Number(amt),
+      transit_days: transit ? parseTransit(transit) : undefined, estimated_delivery_date: etd || undefined }];
+  });
+}
+
+async function fedexAuth(){
+  const id = process.env.FEDEX_CLIENT_ID, secret = process.env.FEDEX_CLIENT_SECRET;
+  if(!id || !secret) throw new Error('FedEx credentials missing');
+
+  // Try Basic header first, then body creds
+  const basic = Buffer.from(`${id}:${secret}`).toString('base64');
+  let r = await fetch(`${FEDEX_API_HOST}/oauth/token`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/x-www-form-urlencoded', 'Authorization':`Basic ${basic}` },
+    body:'grant_type=client_credentials'
+  });
+  if(!r.ok){
+    const params = new URLSearchParams();
+    params.set('grant_type','client_credentials'); params.set('client_id', id); params.set('client_secret', secret);
+    r = await fetch(`${FEDEX_API_HOST}/oauth/token`, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body: params.toString() });
+  }
+  if(!r.ok) throw new Error(`FedEx auth failed ${r.status} ${await r.text()}`);
+  const j = await r.json();
+  return j.access_token;
+}
+
+function parseTransit(s){
+  const m = /(\w+)_DAYS?/.exec(s||''); if(!m) return undefined;
+  const map = {ONE:1,TWO:2,THREE:3,FOUR:4,FIVE:5,SIX:6,SEVEN:7}; return map[m[1]] || undefined;
+}
