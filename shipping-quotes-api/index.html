@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shipping Quotes Test</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f6f8fb; margin:0; padding:24px; }
+    .card { max-width: 960px; margin: 0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:20px; box-shadow: 0 6px 24px rgba(0,0,0,.04); }
+    h1 { margin:0 0 8px; }
+    .row { display:grid; grid-template-columns: repeat(12, 1fr); gap:12px; }
+    .field { grid-column: span 4; }
+    .field.small { grid-column: span 3; }
+    .field.wide { grid-column: 1 / -1; }
+    label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
+    input, select { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; }
+    button { padding:10px 14px; border-radius:10px; border:1px solid #0ea5e9; background:#0ea5e9; color:#fff; font-weight:700; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; margin-top:16px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #e5e7eb; }
+    .note { color:#6b7280; font-size:12px; }
+    .error { color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:10px; border-radius:10px; margin-top:10px; display:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Shipping Quotes Test</h1>
+    <p class="note">This page calls <code>/api/shipping/quote</code> on the same domain. Use it to verify UPS/FedEx rates are working.</p>
+
+    <div class="row">
+      <div class="field small">
+        <label>Origin ZIP</label>
+        <input id="originZip" placeholder="34471" value="34471" />
+      </div>
+      <div class="field small">
+        <label>Destination ZIP</label>
+        <input id="destZip" placeholder="90210" />
+      </div>
+      <div class="field small">
+        <label>Address Type</label>
+        <select id="residential">
+          <option value="false">Commercial</option>
+          <option value="true">Residential</option>
+        </select>
+      </div>
+      <div class="field small">
+        <label>Weight (lb)</label>
+        <input id="weight" type="number" step="0.1" value="25" />
+      </div>
+      <div class="field small">
+        <label>Length (in)</label>
+        <input id="len" type="number" step="0.1" value="18" />
+      </div>
+      <div class="field small">
+        <label>Width (in)</label>
+        <input id="wid" type="number" step="0.1" value="12" />
+      </div>
+      <div class="field small">
+        <label>Height (in)</label>
+        <input id="ht" type="number" step="0.1" value="10" />
+      </div>
+      <div class="field small">
+        <label>Declared Value ($)</label>
+        <input id="value" type="number" step="1" value="500" />
+      </div>
+      <div class="field small">
+        <label>Ship Date</label>
+        <input id="shipDate" type="date" />
+      </div>
+      <div class="field wide">
+        <button id="getRates">Get Rates</button>
+        <span class="note" id="status"></span>
+      </div>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <table id="results" style="display:none">
+      <thead>
+        <tr>
+          <th>Carrier</th>
+          <th>Service</th>
+          <th>Transit</th>
+          <th>Est. Delivery</th>
+          <th>Rate</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+$('getRates').onclick = async () => {
+  $('error').style.display = 'none';
+  $('status').textContent = 'Fetching live rates…';
+
+  const payload = {
+    origin_zip: $('originZip').value.trim(),
+    dest_zip: $('destZip').value.trim(),
+    residential: $('residential').value === 'true',
+    weight_lb: parseFloat($('weight').value),
+    dimensions_in: {
+      length: parseFloat($('len').value),
+      width: parseFloat($('wid').value),
+      height: parseFloat($('ht').value)
+    },
+    declared_value: parseFloat($('value').value || 0),
+    ship_date: $('shipDate').value || null
+  };
+
+  if (!payload.origin_zip || !payload.dest_zip || !payload.weight_lb) {
+    $('error').textContent = 'Origin ZIP, Destination ZIP, and Weight are required.';
+    $('error').style.display='block';
+    $('status').textContent = '';
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/shipping/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error('API error: ' + r.status);
+    const data = await r.json();
+    const tbody = $('resultsBody');
+    tbody.innerHTML = '';
+    (data.quotes || []).forEach(q => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${q.carrier}</td>
+        <td>${q.service_name}</td>
+        <td>${q.transit_days ?? '-'}</td>
+        <td>${q.estimated_delivery_date ?? '-'}</td>
+        <td><strong>$${Number(q.total_charge).toFixed(2)}</strong></td>
+        <td>${q.notes || ''}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    document.getElementById('results').style.display = (data.quotes||[]).length ? 'table' : 'none';
+    if (!(data.quotes||[]).length) {
+      $('error').textContent = 'No rates returned. Try different inputs or check carrier credentials.';
+      $('error').style.display = 'block';
+    }
+  } catch (e) {
+    $('error').textContent = e.message || String(e);
+    $('error').style.display = 'block';
+  } finally {
+    $('status').textContent = '';
+  }
+};
+</script>
+</body>
+</html>
