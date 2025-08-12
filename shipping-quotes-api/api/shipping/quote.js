@@ -1,5 +1,5 @@
 // api/shipping/quote.js
-// Set Vercel env CARRIER_ENV = "sandbox" or "prod" (default: prod)
+// Set Vercel env CARRIER_ENV = "sandbox" or "prod" (default: "prod")
 
 module.exports = async (req, res) => {
   // CORS (keep * while testing; restrict later)
@@ -130,27 +130,43 @@ async function getUpsRates(input) {
       Shipment: {
         Shipper: {
           ShipperNumber: process.env.UPS_ACCOUNT_NUMBER || undefined,  // helps sandbox
+          Name: 'Test Shipper',
           Address: {
+            AddressLine: ['123 Test St'],
+            City: input.origin_city || undefined,
+            StateProvinceCode: input.origin_state || undefined,
             PostalCode: String(input.origin_zip),
-            CountryCode: 'US',
-            StateProvinceCode: input.origin_state || undefined          // optional but helps sandbox
+            CountryCode: 'US'
           }
         },
         // UPS sandbox often prefers explicit ShipFrom
         ShipFrom: {
+          Name: 'Test Warehouse',
           Address: {
+            AddressLine: ['123 Test St'],
+            City: input.origin_city || undefined,
+            StateProvinceCode: input.origin_state || undefined,
             PostalCode: String(input.origin_zip),
-            CountryCode: 'US',
-            StateProvinceCode: input.origin_state || undefined
+            CountryCode: 'US'
           }
         },
         ShipTo: {
+          Name: 'Test Consignee',
           Address: {
+            AddressLine: ['456 Test Ave'],
+            City: input.dest_city || undefined,
+            StateProvinceCode: input.dest_state || undefined,
             PostalCode: String(input.dest_zip),
             CountryCode: 'US',
-            StateProvinceCode: input.dest_state || undefined,           // optional
             ResidentialAddressIndicator: input.residential ? '' : undefined
           }
+        },
+        // Some sandbox orgs require billing info even for rating
+        PaymentDetails: {
+          ShipmentCharge: [{
+            Type: '01', // Transportation
+            BillShipper: { AccountNumber: process.env.UPS_ACCOUNT_NUMBER || '' }
+          }]
         },
         Package: [{
           PackagingType: { Code: '02' }, // customer-supplied package
@@ -286,4 +302,3 @@ function parseTransit(s) {
   const map = { ONE:1, TWO:2, THREE:3, FOUR:4, FIVE:5, SIX:6, SEVEN:7 };
   return map[m[1]] || undefined;
 }
-
