@@ -19,12 +19,16 @@
     th, td { text-align:left; padding:10px; border-bottom:1px solid #e5e7eb; }
     .note { color:#6b7280; font-size:12px; }
     .error { color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:10px; border-radius:10px; margin-top:10px; display:none; }
+    .env { float:right; font-size:12px; background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; padding:4px 8px; border-radius:8px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Shipping Quotes Test</h1>
-    <p class="note">This page calls <code>/api/shipping/quote</code> on the same domain. Use it to verify UPS/FedEx rates are working.</p>
+    <h1>Shipping Quotes Test <span class="env" id="envBadge">Env: unknown</span></h1>
+    <p class="note">
+      This page calls <code>/api/shipping/quote</code> on the same domain.
+      Use URL params like <code>?demo=1</code> for mock data or <code>?only=ups</code>/<code>?only=fedex</code> to isolate a carrier.
+    </p>
 
     <div class="row">
       <div class="field small">
@@ -32,8 +36,16 @@
         <input id="originZip" placeholder="34471" value="34471" />
       </div>
       <div class="field small">
+        <label>Origin State (e.g., FL)</label>
+        <input id="originState" placeholder="FL" />
+      </div>
+      <div class="field small">
         <label>Destination ZIP</label>
         <input id="destZip" placeholder="90210" />
+      </div>
+      <div class="field small">
+        <label>Destination State (e.g., CA)</label>
+        <input id="destState" placeholder="CA" />
       </div>
       <div class="field small">
         <label>Address Type</label>
@@ -88,8 +100,20 @@
       <tbody id="resultsBody"></tbody>
     </table>
   </div>
+
 <script>
 const $ = id => document.getElementById(id);
+
+// Set badge from diag
+(async function setEnvBadge(){
+  try {
+    const r = await fetch('/api/shipping/quote?diag=1');
+    const j = await r.json();
+    $('envBadge').textContent = 'Env: ' + (j?.env?.MODE || 'unknown');
+  } catch {
+    $('envBadge').textContent = 'Env: unknown';
+  }
+})();
 
 $('getRates').onclick = async () => {
   $('error').style.display = 'none';
@@ -97,7 +121,9 @@ $('getRates').onclick = async () => {
 
   const payload = {
     origin_zip: $('originZip').value.trim(),
+    origin_state: $('originState').value.trim() || null,
     dest_zip: $('destZip').value.trim(),
+    dest_state: $('destState').value.trim() || null,
     residential: $('residential').value === 'true',
     weight_lb: parseFloat($('weight').value),
     dimensions_in: {
@@ -121,10 +147,10 @@ $('getRates').onclick = async () => {
     const demo = qs.get('demo') === '1';
     const only = qs.get('only'); // "ups" or "fedex"
 
-    const queryParts = [];
-    if (demo) queryParts.push('demo=1');
-    if (only) queryParts.push('only=' + encodeURIComponent(only));
-    const endpoint = '/api/shipping/quote' + (queryParts.length ? '?' + queryParts.join('&') : '');
+    const parts = [];
+    if (demo) parts.push('demo=1');
+    if (only) parts.push('only=' + encodeURIComponent(only));
+    const endpoint = '/api/shipping/quote' + (parts.length ? '?' + parts.join('&') : '');
 
     const r = await fetch(endpoint, {
       method: 'POST',
@@ -134,7 +160,6 @@ $('getRates').onclick = async () => {
 
     const text = await r.text();
     if (!r.ok) {
-      // show raw API error body so we can see which carrier failed
       $('error').textContent = `API error ${r.status}: ${text}`;
       $('error').style.display = 'block';
       $('status').textContent = '';
@@ -165,7 +190,5 @@ $('getRates').onclick = async () => {
   }
 };
 </script>
-
-
 </body>
 </html>
